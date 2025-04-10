@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>File Transfer with QR</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 40px; }
+    #qrCode { margin-top: 20px; display: none; }
+    input, button { padding: 10px; margin: 10px; }
+  </style>
+</head>
+<body>
+
+  <h1>📁 File Transfer</h1>
+
+  <!-- Upload Section -->
+  <input type="file" id="fileInput" />
+  <button onclick="upload()">Upload</button>
+  <p id="codeDisplay"></p>
+  <img id="qrCode" width="200" />
+
+  <!-- Download Section -->
+  <h3>🔽 Download a file</h3>
+  <input type="text" id="codeInput" placeholder="Enter 6-digit code" />
+  <button onclick="download()">Download</button>
+
+  <script>
+    function upload() {
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return alert("Please select a file");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      fetch("/upload", {
+        method: "POST",
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        const code = data.code;
+        document.getElementById("codeDisplay").innerText = "Your Code: " + code;
+
+        // Generate QR
+        fetch("/qrcode/" + code)
+          .then(res => res.json())
+          .then(data => {
+            const img = document.getElementById("qrCode");
+            img.src = data.qr;
+            img.style.display = "block";
+          });
+      });
+    }
+
+    function download() {
+      const code = document.getElementById("codeInput").value;
+      if (!code) return alert("Enter a code");
+      window.location.href = "/download/" + code;
+    }
+  </script>
+
+</body>
+</html>
