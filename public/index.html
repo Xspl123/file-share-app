@@ -2,11 +2,115 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>File Transfer with QR</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 40px; }
-    #qrCode { margin-top: 20px; display: none; }
-    input, button { padding: 10px; margin: 10px; }
+    body {
+      font-family: 'Arial', sans-serif;
+      text-align: center;
+      padding: 40px;
+      margin: 0;
+      background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+      color: #333;
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 20px;
+      color: #4a90e2;
+    }
+    h3 {
+      font-size: 1.5rem;
+      margin-top: 40px;
+      color: #333;
+    }
+    #qrCode {
+      margin: 20px auto 0; /* Center the QR code */
+      display: none;
+      border: 2px solid #4a90e2;
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+    }
+    input, button {
+      padding: 12px 20px;
+      margin: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 1rem;
+      width: 90%;
+      max-width: 400px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #4a90e2;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #357abd;
+    }
+    #codeDisplay {
+      font-size: 1.5rem; /* Bigger font size */
+      margin-top: 20px;
+      color: #4a90e2;
+      font-weight: bold; /* Make the text bold */
+      padding: 10px; /* Add padding for the box */
+      border: 2px solid #4a90e2; /* Add a border */
+      border-radius: 8px; /* Rounded corners */
+      background: #f0f8ff; /* Light background color */
+      display: inline-block; /* Make it look like a card */
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Add a subtle shadow */
+    }
+    @media (max-width: 600px) {
+      body {
+        padding: 20px;
+      }
+      h1 {
+        font-size: 2rem;
+      }
+      h3 {
+        font-size: 1.2rem;
+      }
+      input, button {
+        font-size: 0.9rem;
+      }
+    }
+    progress {
+      appearance: none;
+      width: 90%;
+      max-width: 400px;
+      height: 20px;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 10px auto; /* Center the progress bar */
+      display: block;
+    }
+    progress::-webkit-progress-bar {
+      background-color: #f0f0f0;
+    }
+    progress::-webkit-progress-value {
+      background: linear-gradient(90deg, #4caf50, #2196f3);
+    }
+    progress::-moz-progress-bar {
+      background: linear-gradient(90deg, #4caf50, #2196f3);
+    }
+    .progress-container {
+      position: relative;
+      text-align: center;
+      margin: 10px auto;
+      width: 90%;
+      max-width: 400px;
+    }
+    .progress-text {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #333;
+    }
   </style>
 </head>
 <body>
@@ -16,47 +120,175 @@
   <!-- Upload Section -->
   <input type="file" id="fileInput" />
   <button onclick="upload()">Upload</button>
-  <p id="codeDisplay"></p>
-  <img id="qrCode" width="200" />
+  <br>
+  <div class="progress-container" id="uploadProgressContainer" style="display: none;">
+    <progress id="uploadProgress" value="0" max="100"></progress>
+    <span class="progress-text" id="uploadProgressText">0%</span>
+  </div>
+  <p id="codeDisplay"></p> <!-- Moved below the upload button -->
+  <div style="text-align: center;"> <!-- Center the QR code container -->
+    <img id="qrCode" width="200" />
+  </div>
 
   <!-- Download Section -->
   <h3>🔽 Download a file</h3>
-  <input type="text" id="codeInput" placeholder="Enter 6-digit code" />
+  <input type="text" id="codeInput" placeholder="Enter 6-digit code" autocomplete="off" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6)" />
   <button onclick="download()">Download</button>
+  <div class="progress-container" id="downloadProgressContainer" style="display: none;">
+    <progress id="downloadProgress" value="0" max="100"></progress>
+    <span class="progress-text" id="downloadProgressText">0%</span>
+  </div>
 
   <script>
+    function updateProgress(progressElement, textElement, value) {
+      progressElement.value = value;
+      textElement.innerText = value + "%";
+    }
+
     function upload() {
       const file = document.getElementById("fileInput").files[0];
       if (!file) return alert("Please select a file");
 
+      const uploadButton = document.querySelector("button[onclick='upload()']");
+      uploadButton.disabled = true; // Disable the button to prevent duplicate uploads
+
       const formData = new FormData();
       formData.append("file", file);
+
+      const uploadProgressContainer = document.getElementById("uploadProgressContainer");
+      const uploadProgress = document.getElementById("uploadProgress");
+      const uploadProgressText = document.getElementById("uploadProgressText");
+      uploadProgressContainer.style.display = "block"; // Show progress bar
 
       fetch("/upload", {
         method: "POST",
         body: formData
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          return res.json().then(err => { throw new Error(err.message); });
+        }
+        return res.json();
+      })
       .then(data => {
         const code = data.code;
         document.getElementById("codeDisplay").innerText = "Your Code: " + code;
 
-        // Generate QR
+        // Generate QR and display in the same box
         fetch("/qrcode/" + code)
           .then(res => res.json())
           .then(data => {
             const img = document.getElementById("qrCode");
-            img.src = data.qr;
-            img.style.display = "block";
+            img.src = data.qr; // Update the QR code image source
+            img.style.display = "block"; // Ensure the image is visible
           });
+      })
+      .catch(err => {
+        alert(err.message); // Display error message (e.g., duplicate file)
+        uploadButton.disabled = false; // Re-enable the button on error
+      })
+      .finally(() => {
+        uploadProgressContainer.style.display = "none"; // Hide progress bar
       });
+
+      // Track upload progress
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/upload", true);
+      xhr.upload.onprogress = function (event) {
+        if (event.lengthComputable) {
+          const percentage = Math.round((event.loaded / event.total) * 100);
+          updateProgress(uploadProgress, uploadProgressText, percentage);
+        }
+      };
+      xhr.onload = function () {
+        if (xhr.status === 200) {
+          updateProgress(uploadProgress, uploadProgressText, 100);
+        }
+      };
+      xhr.send(formData);
     }
 
     function download() {
       const code = document.getElementById("codeInput").value;
       if (!code) return alert("Enter a code");
-      window.location.href = "/download/" + code;
+
+      const downloadProgressContainer = document.getElementById("downloadProgressContainer");
+      const downloadProgress = document.getElementById("downloadProgress");
+      const downloadProgressText = document.getElementById("downloadProgressText");
+      downloadProgressContainer.style.display = "block"; // Ensure progress bar is visible
+
+      fetch("/download/" + code)
+        .then(res => {
+          if (!res.ok) {
+            throw new Error("Download failed");
+          }
+
+          const totalSize = parseInt(res.headers.get("Content-Length"), 10) || 1; // Fallback to 1 to avoid division by zero
+          const contentDisposition = res.headers.get("Content-Disposition");
+          const fileNameMatch = contentDisposition && contentDisposition.match(/filename="(.+)"/);
+          const fileName = fileNameMatch ? fileNameMatch[1] : "file";
+
+          let downloaded = 0;
+
+          const reader = res.body.getReader();
+          const stream = new ReadableStream({
+            start(controller) {
+              function push() {
+                reader.read().then(({ done, value }) => {
+                  if (done) {
+                    controller.close();
+                    updateProgress(downloadProgress, downloadProgressText, 100); // Ensure progress reaches 100%
+                    return;
+                  }
+                  downloaded += value.length;
+                  const percentage = Math.round((downloaded / totalSize) * 100);
+                  updateProgress(downloadProgress, downloadProgressText, percentage); // Update progress
+                  controller.enqueue(value);
+                  push();
+                }).catch(err => {
+                  console.error("Stream error:", err);
+                  downloadProgressContainer.style.display = "none"; // Hide progress bar on error
+                });
+              }
+              push();
+            }
+          });
+
+          return new Response(stream).blob().then(blob => ({ blob, fileName }));
+        })
+        .then(({ blob, fileName }) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.style.display = "none";
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+        })
+        .catch(err => {
+          alert(err.message);
+          downloadProgressContainer.style.display = "none"; // Hide progress bar on error
+        })
+        .finally(() => {
+          setTimeout(() => {
+            downloadProgressContainer.style.display = "none"; // Hide progress bar after completion
+          }, 1000);
+        });
     }
+
+    fetch('/get-ip')
+    .then(res => res.json())
+    .then(data => {
+      fetch('/log-ip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ip: data.ip })
+      });
+    })
+    .catch(err => console.error('Failed to get or log IP:', err));
   </script>
 
 </body>
